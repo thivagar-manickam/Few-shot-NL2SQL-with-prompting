@@ -76,10 +76,9 @@ if __name__ == '__main__':
     else:
         model = GeminiModel()
 
-    stop_index = 1
+    stop_index = 25
     for index, row in data_df.iterrows():
         if index < stop_index:
-            # if index < 405: continue #for testing
             print(f"index is {index}")
             schema_links = None
             while schema_links is None:
@@ -171,7 +170,7 @@ if __name__ == '__main__':
             while debugged_SQL is None:
                 try:
                     if chosen_model == "gemini":
-                        debugged_SQL = model.gemini_response_generation(
+                        debugged_SQL = model.gemini_debugger_response_generation(
                             prompt_obj.debugger_prompt(row['question'], row['db_id'],
                                                        SQL)).replace("\n", " ")
 
@@ -181,6 +180,7 @@ if __name__ == '__main__':
 
             SQL = "SELECT " + debugged_SQL
             generated_output.append([row['question'], SQL, row['query'], row['db_id']])
+            print(f"Iteration {index} done")
         else:
             break
     print(f"End Time ---> {datetime.utcnow()}")

@@ -20,3 +20,21 @@ class GeminiModel:
     def gemini_response_generation(self, prompt):
         response = self.model.generate_content(prompt)
         return response.text
+
+    def gemini_debugger_response_generation(self, prompt):
+        response = self.model.generate_content(prompt)
+
+        output = response.text
+
+        try:
+            if output.index("SELECT") > -1:
+                output = output.replace("SELECT", "", 1).strip()
+
+            if output.index("```sql") > -1:
+                output = output.replace("sql", "").replace("`", "").strip()
+
+            output.replace(";", "")
+        except ValueError as ex:
+            return output
+
+        return output
