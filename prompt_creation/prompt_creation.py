@@ -101,7 +101,9 @@ class PromptCreation:
     6) Only change the GROUP BY clause when necessary (Avoid redundant columns in GROUP BY).
     7) Use GROUP BY on one column only.
     8) Use Nested Queries only when required. If the nested query can be replaced with simple SQL commands, then use them.
+    9) Make sure there is a space before and after the conditional symbols like !=, =, <>, >, <
     
+    The output should always be a SQL query without any explanation or reasoning for the correction.
     """
         fields = self.find_fields_mysql_like(database)
         fields += "Foreign_keys = " + self.find_foreign_keys_mysql_like(database) + '\n'
