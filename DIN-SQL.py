@@ -8,12 +8,12 @@ from models.gpt_model import GPTModel
 
 if sys.argv[1] == "--dataset" and sys.argv[3] == "--output":
     dataset_schema = sys.argv[2] + "tables.json"
-    dataset = sys.argv[2] + "dev.json"
+    dataset = sys.argv[2] + "dev_test.json"
     output_file = sys.argv[4]
     chosen_model = "gemini"  # default model
     if len(sys.argv) > 5 and sys.argv[5] == "--model":
         if len(sys.argv) == 7:
-            if sys.argv[6] in ['gemini', 'gpt', 'llama']:
+            if sys.argv[6] in ['gemini', 'gpt', 'gpt4', 'llama']:
                 chosen_model = sys.argv[6]
 
 else:
@@ -61,6 +61,23 @@ def creating_schema(dataset_json):
     return schema_details, primary_key_details, foreign_key_details
 
 
+def write_output_file(selected_model, result):
+    if selected_model == "gemini":
+        with open(output_file, 'w') as f:
+            for line in result:
+                f.write(f"{line}\n")
+
+    elif selected_model == "gpt":
+        with open("./data/gpt_predicted_sql.txt", 'w') as f:
+            for line in result:
+                f.write(f"{line}\n")
+
+    elif selected_model == "gpt4":
+        with open("./data/gpt4_predicted_sql.txt", 'w') as f:
+            for line in result:
+                f.write(f"{line}\n")
+
+
 if __name__ == '__main__':
     spider_schema, spider_primary, spider_foreign = creating_schema(dataset_schema)
 
@@ -70,156 +87,164 @@ if __name__ == '__main__':
 
     print(f"Start Time ---> {datetime.utcnow()}")
     prompt_obj = PromptCreation(spider_schema, spider_foreign, spider_primary)
-    gptModel = GPTModel()
 
     if chosen_model == "gemini":
         model = GeminiModel()
 
+    elif chosen_model == "gpt" or chosen_model == "gpt4":
+        model = GPTModel(chosen_model)
+
     else:
         model = GeminiModel()
 
-    stop_index = 25
     for index, row in data_df.iterrows():
-        if index < stop_index:
-            print(f"index is {index}")
-            schema_links = None
-            while schema_links is None:
-                try:
-                    if chosen_model == "gemini":
-                        schema_links = model.gemini_response_generation(
-                            prompt_obj.schema_linking_prompt_maker(row['question'],
-                                                                   row['db_id']))
-
-                        gptModel.calculate_no_of_tokens(
-                            prompt_obj.schema_linking_prompt_maker(row['question'],
-                                                                   row['db_id']))
-                except Exception as ex:
-                    time.sleep(3)
-                    pass
+        print(f"index is {index}")
+        schema_links = None
+        while schema_links is None:
             try:
-                schema_links = schema_links.split("Schema_links: ")[1]
+                if chosen_model == "gemini":
+                    schema_links = model.gemini_response_generation(
+                        prompt_obj.schema_linking_prompt_maker(row['question'],
+                                                               row['db_id']))
+
+                elif chosen_model == "gpt" or chosen_model == "gpt4":
+                    schema_links = model.gpt_response_generation(
+                        prompt_obj.schema_linking_prompt_maker(row['question'],
+                                                               row['db_id']))
 
             except Exception as ex:
-                print("Slicing error for the schema_linking module")
-                schema_links = "[]"
+                time.sleep(3)
+                pass
+        try:
+            schema_links = schema_links.split("Schema_links: ")[1]
 
-            classification = None
-            while classification is None:
-                try:
-                    if chosen_model == "gemini":
-                        classification = model.gemini_response_generation(
-                            prompt_obj.classification_prompt_maker(row['question'],
-                                                                   row['db_id'],
-                                                                   schema_links[1:]))
+        except Exception as ex:
+            print("Slicing error for the schema_linking module")
+            schema_links = "[]"
 
-                        gptModel.calculate_no_of_tokens(
-                            prompt_obj.classification_prompt_maker(row['question'],
-                                                                   row['db_id'],
-                                                                   schema_links[1:]))
-                except Exception as ex:
-                    time.sleep(3)
-                    pass
+        classification = None
+        while classification is None:
             try:
-                predicted_class = classification.split("Label: ")[1]
+                if chosen_model == "gemini":
+                    classification = model.gemini_response_generation(
+                        prompt_obj.classification_prompt_maker(row['question'],
+                                                               row['db_id'],
+                                                               schema_links[1:]))
+
+                elif chosen_model == "gpt" or chosen_model == "gpt4":
+                    classification = model.gpt_response_generation(
+                        prompt_obj.classification_prompt_maker(row['question'],
+                                                               row['db_id'],
+                                                               schema_links[1:]))
             except Exception as ex:
-                print("Slicing error for the classification module")
-                predicted_class = '"NON-NESTED"'
+                time.sleep(3)
+                pass
+        try:
+            predicted_class = classification.split("Label: ")[1]
 
-            if '"EASY"' in predicted_class:
-                SQL = None
-                while SQL is None:
-                    try:
-                        if chosen_model == "gemini":
-                            SQL = model.gemini_response_generation(
-                                prompt_obj.easy_prompt_maker(row['question'], row['db_id'],
-                                                             schema_links))
+        except Exception as ex:
+            print("Slicing error for the classification module")
+            predicted_class = '"NON-NESTED"'
 
-                            gptModel.calculate_no_of_tokens(
-                                prompt_obj.easy_prompt_maker(row['question'], row['db_id'],
-                                                             schema_links))
-                    except Exception as ex:
-                        time.sleep(3)
-                        pass
-
-            elif '"NON-NESTED"' in predicted_class:
-                SQL = None
-                while SQL is None:
-                    try:
-                        if chosen_model == "gemini":
-                            SQL = model.gemini_response_generation(
-                                prompt_obj.medium_prompt_maker(row['question'], row['db_id'],
-                                                               schema_links))
-
-                            gptModel.calculate_no_of_tokens(
-                                prompt_obj.medium_prompt_maker(row['question'], row['db_id'],
-                                                               schema_links))
-
-                    except Exception as ex:
-                        time.sleep(3)
-                        pass
-
-                try:
-                    SQL = SQL.split("SQL: ")[1]
-
-                except Exception as ex:
-                    print("SQL slicing error")
-                    SQL = "SELECT"
-            else:
-                if len(classification.split('question = ["')) > 1:
-                    sub_questions = classification.split('question = ["')[1].split('"]')[0]
-                    SQL = None
-                    while SQL is None:
-                        try:
-                            if chosen_model == "gemini":
-                                SQL = model.gemini_response_generation(
-                                    prompt_obj.hard_prompt_maker(row['question'], row['db_id'],
-                                                                 schema_links,
-                                                                 sub_questions))
-
-                                gptModel.calculate_no_of_tokens(
-                                    prompt_obj.hard_prompt_maker(row['question'], row['db_id'],
-                                                                 schema_links,
-                                                                 sub_questions))
-                        except Exception as ex:
-                            time.sleep(3)
-                            pass
-                try:
-                    SQL = SQL.split("SQL: ")[1]
-
-                except Exception as ex:
-                    print("SQL slicing error")
-                    SQL = "SELECT"
-
-            debugged_SQL = None
-            while debugged_SQL is None:
+        if '"EASY"' in predicted_class:
+            SQL = None
+            while SQL is None:
                 try:
                     if chosen_model == "gemini":
-                        debugged_SQL = model.gemini_debugger_response_generation(
-                            prompt_obj.debugger_prompt(row['question'], row['db_id'],
-                                                       SQL)).replace("\n", " ")
+                        SQL = model.gemini_response_generation(
+                            prompt_obj.easy_prompt_maker(row['question'], row['db_id'],
+                                                         schema_links))
 
-                        gptModel.calculate_no_of_tokens(
-                            prompt_obj.debugger_prompt(row['question'], row['db_id'],
-                                                       SQL))
+                    elif chosen_model == "gpt" or chosen_model == "gpt4":
+                        SQL = model.gpt_response_generation(
+                            prompt_obj.easy_prompt_maker(row['question'], row['db_id'],
+                                                         schema_links))
+                except Exception as ex:
+                    time.sleep(3)
+                    pass
+
+        elif '"NON-NESTED"' in predicted_class:
+            SQL = None
+            while SQL is None:
+                try:
+                    if chosen_model == "gemini":
+                        SQL = model.gemini_response_generation(
+                            prompt_obj.medium_prompt_maker(row['question'], row['db_id'],
+                                                           schema_links))
+
+                    elif chosen_model == "gpt" or chosen_model == "gpt4":
+                        SQL = model.gpt_response_generation(
+                            prompt_obj.medium_prompt_maker(row['question'], row['db_id'],
+                                                           schema_links))
 
                 except Exception as ex:
                     time.sleep(3)
                     pass
 
-            SQL = "SELECT " + debugged_SQL
-            generated_output.append([row['question'], SQL, row['query'], row['db_id']])
-            print(f"Iteration {index} done")
+            try:
+                if SQL.index("SQL: ") > -1:
+                    SQL = SQL.split("SQL: ")[1]
+
+            except Exception as ex:
+                print("SQL slicing error")
+                SQL = "SELECT"
         else:
-            break
+            if len(classification.split('question = ["')) > 1 or len(classification.split('questions = ["')) > 1:
+                if 'question = ["' in classification:
+                    sub_questions = classification.split('question = ["')[1].split('"]')[0]
+
+                elif 'questions = ["' in classification:
+                    sub_questions = classification.split('questions = ["')[1].split('"]')[0]
+
+                SQL = None
+                while SQL is None:
+                    try:
+                        if chosen_model == "gemini":
+                            SQL = model.gemini_response_generation(
+                                prompt_obj.hard_prompt_maker(row['question'], row['db_id'],
+                                                             schema_links,
+                                                             sub_questions))
+
+                        elif chosen_model == "gpt" or chosen_model == "gpt4":
+                            SQL = model.gpt_response_generation(
+                                prompt_obj.hard_prompt_maker(row['question'], row['db_id'],
+                                                             schema_links,
+                                                             sub_questions))
+                    except Exception as ex:
+                        time.sleep(3)
+                        pass
+            try:
+                if SQL.index("SQL: ") > -1:
+                    SQL = SQL.split("SQL: ")[1]
+
+            except Exception as ex:
+                print("SQL slicing error")
+                SQL = "SELECT"
+
+        debugged_SQL = None
+        while debugged_SQL is None:
+            try:
+                if chosen_model == "gemini":
+                    debugged_SQL = model.gemini_debugger_response_generation(
+                        prompt_obj.debugger_prompt(row['question'], row['db_id'],
+                                                   SQL)).replace("\n", " ")
+
+                elif chosen_model == "gpt" or chosen_model == "gpt4":
+                    time.sleep(60)
+                    debugged_SQL = model.gpt_debug_response_generation(
+                        prompt_obj.debugger_prompt(row['question'], row['db_id'],
+                                                   SQL)).replace("\n", " ")
+
+            except Exception as ex:
+                time.sleep(3)
+                pass
+
+        SQL = "SELECT " + debugged_SQL
+        generated_output.append([row['question'], SQL, row['query'], row['db_id']])
+        print(f"Iteration {index} done")
     print(f"End Time ---> {datetime.utcnow()}")
 
     df = pd.DataFrame(generated_output, columns=['NLQ', 'PREDICTED SQL', 'GOLD SQL', 'DATABASE'])
     results = df['PREDICTED SQL'].tolist()
-    # with open(output_file, 'w') as f:
-    #     for line in results:
-    #         f.write(f"{line}\n")
 
-    print(f"Total number of tokens for 25 question is - {gptModel.num_tokens}")
-    print(f"Total token with answer is - {gptModel.total_tokens}")
-    print(f"Total cost for GPT model for 25 questions is - {gptModel.calculate_cost()}")
-
+    write_output_file(chosen_model, results)

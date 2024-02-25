@@ -33,7 +33,7 @@ class GeminiModel:
             if output.index("```sql") > -1:
                 output = output.replace("sql", "").replace("`", "").strip()
 
-            output.replace(";", "")
+            output.replace(";", "").replace("` ", "").replace("`", "").strip()
         except ValueError as ex:
             return output
 

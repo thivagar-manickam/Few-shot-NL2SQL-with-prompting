@@ -1,60 +1,84 @@
 import openai
 import os
-import tiktoken
-
-API_KEY = ""
-os.environ["OPEN_API_KEY"] = API_KEY
-
-openai.api_key = os.getenv("GEMINI_API_KEY")
+from configparser import ConfigParser
 
 
 class GPTModel:
-    def __init__(self):
-        self.encoding = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
-        self.num_tokens = 0
-        self.token_pricing = 0.0005
-        self.max_ans_len = 600
-        self.no_of_prompt = 0
-        self.total_tokens = 0
+    config_section = 'openAIKey'
+    open_ai_key = None
+    model_name = None
 
-    def calculate_no_of_tokens(self, prompt):
-        self.num_tokens += len(self.encoding.encode(prompt))
-        self.no_of_prompt += 1
+    def __init__(self, model):
+        if model == "gpt":
+            self.model_name = "gpt-3.5-turbo-0125"
 
-    def calculate_cost(self):
-        self.total_tokens = (self.no_of_prompt * self.max_ans_len) + self.num_tokens
-        cost = (self.token_pricing * self.total_tokens) / 1000
+        elif model == "gpt4":
+            self.model_name = "gpt-4"
 
-        return cost
+        self.get_openai_key()
 
-    @staticmethod
+    def get_openai_key(self):
+        parser = ConfigParser()
+        parser.read('./app_config.ini')
+        if parser.has_section(self.config_section):
+            params = parser.items(self.config_section)
+            for param in params:
+                self.open_ai_key = param[1]
+
     def gpt_response_generation(self, prompt):
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model= self.model_name,
             messages=[{"role": "user", "content": prompt}],
+            api_key=self.open_ai_key,
             n=1,
             stream=False,
-            temperature=0.0,
+            temperature=0.2,
             max_tokens=600,
             top_p=1.0,
             frequency_penalty=0.0,
             presence_penalty=0.0,
             stop=["Q:"]
         )
-        return response['choices'][0]['message']['content']
 
-    @staticmethod
-    def gpt_debug(self, prompt):
+        output = response['choices'][0]['message']['content']
+        try:
+            if output.index("SELECT") > -1:
+                output = output.replace("SELECT", "", 1).strip()
+
+            if output.index("```sql") > -1:
+                output = output.replace("sql", "").replace("`", "").strip()
+
+            output.replace(";", "").replace("` ", "").replace("`", "").strip()
+        except ValueError as ex:
+            return output
+
+        return output
+
+    def gpt_debug_response_generation(self, prompt):
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model= self.model_name,
             messages=[{"role": "user", "content": prompt}],
+            api_key=self.open_ai_key,
             n=1,
             stream=False,
-            temperature=0.0,
+            temperature=0.2,
             max_tokens=350,
             top_p=1.0,
             frequency_penalty=0.0,
             presence_penalty=0.0,
             stop=["#", ";", "\n\n"]
         )
-        return response['choices'][0]['message']['content']
+
+        output = response['choices'][0]['message']['content']
+        try:
+            if output.index("SELECT") > -1:
+                output = output.replace("SELECT", "", 1).strip()
+
+            if output.index("```sql") > -1:
+                output = output.replace("sql", "").replace("`", "").strip()
+
+            output.replace(";", "").replace("` ", "").replace("`", "").strip()
+        except ValueError as ex:
+            return output
+
+        return output
